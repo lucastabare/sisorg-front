@@ -1,23 +1,68 @@
-import { useParams } from "react-router-dom";
-import { Grid, Alert } from "@mui/material";
-import Loader from "../atoms/Loader";
-import RegistrySummary from "../organisms/RegistrySummary";
-import { useRegistry } from "../../hooks/useRegistries";
+import { useParams, useNavigate } from "react-router-dom";
+import { useRegistry, useDeleteRegistry } from "../../hooks/useRegistries";
+import { Box, Card, CardContent, CardHeader, Stack, Button, Typography } from "@mui/material";
+import RowList from "../molecules/RowList";
+import RowsBarChart from "../organisms/RowsBarChart";
+import ErrorSnackbar from "../atoms/ErrorSnackbar";
+import { useState } from "react";
 
 export default function RegistryPage() {
     const { id } = useParams();
-    const number = Number(id);
-    const registry = useRegistry(number);
+    const navigate = useNavigate();
+    const params = Number(id);
+    const query = useRegistry(params);
+    const deleteSync = useDeleteRegistry();
+    const [errorSync, setErrorSync] = useState("");
 
-    if (registry.isLoading) return <Loader />;
-    if (registry.isError) return <Alert severity="error">No se pudo cargar el registro.</Alert>;
-    if (!registry.data) return <Alert severity="warning">Registro no encontrado.</Alert>;
+    const handleDelete = async () => {
+        try {
+            await deleteSync.mutateAsync(params);
+            navigate("/");
+        } catch (e: any) {
+            setErrorSync(e?.message ?? "Error al borrar");
+        }
+    };
+
+    if (!id || Number.isNaN(params) || params <= 0) {
+        return (
+            <Stack spacing={2}>
+                <Typography>ID inválido.</Typography>
+                <Button variant="outlined" onClick={() => navigate("/")}>Volver</Button>
+            </Stack>
+        );
+    }
+
+    if (query.isLoading) return <Box>cargando...</Box>;
+    if (query.isError) return <Box>error</Box>;
+    if (!query.data) return <Box>no data</Box>;
 
     return (
-        <Grid container spacing={2}>
-            <Grid size={{ xs: 12, md: 12 }}>
-                <RegistrySummary data={registry.data} />
-            </Grid>
-        </Grid>
+        <Stack spacing={2}>
+            <Card>
+                <CardHeader
+                    title={`Registro #${query.data.id}`}
+                    subheader={`${query.data.count} filas · ${new Date(query.data.timestamp).toLocaleString()}`}
+                />
+                <CardContent>
+                    <RowList rows={query.data.rows} />
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardHeader title="Gráfico de barras" />
+                <CardContent>
+                    <RowsBarChart rows={query.data.rows} />
+                </CardContent>
+            </Card>
+
+            <Box display="flex" gap={1}>
+                <Button variant="outlined" onClick={() => navigate("/")}>Volver</Button>
+                <Button color="error" variant="contained" onClick={handleDelete} disabled={deleteSync.isPending}>
+                    Borrar registro
+                </Button>
+            </Box>
+
+            <ErrorSnackbar open={!!errorSync} text={errorSync} onClose={() => setErrorSync("")} />
+        </Stack>
     );
 }
